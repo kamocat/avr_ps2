@@ -35,13 +35,17 @@ void init_ps2( void ) {
 	 * voltage levels. The PS/2 device is 5v, and the AVR uC is
 	 * 3.3v. However, this also makes it easier too troubleshoot,
 	 * since I can now tell who the signal is coming from. */
-	DDRD &= ~0x03;	// pin 1 is clock, pin 0 is data (recieving)
-	DDRD |= 0x30;	// pin 5 is clock, pin 0 is data (sending)
+	DDRD &= ~0x03;	// pin 1 is clock, pin 7 is data (recieving)
+	DDRD |= 0x80;	// pin 6 is clock, pin 0 is data (sending)
 
 	/* TODO: Set up interrupts. Read/write on low-clock. */
 
 	return;
 }
+
+/* Define macros for the send_bit and recieve_bit */
+#define S_BIT (ps2_byte & 0x01)
+#define R_BIT (PIND & 0x80)
 
 /* TODO: measure timing of signal.
  * The docs say the data should be changed in the MIDDLE
@@ -61,30 +65,36 @@ void init_ps2( void ) {
  */
 
 
-ISR( INT0_vect ) {
+ISR( INT1_vect ) {
 	switch( state.now ) {
 		case idle:
 			bit_count = 1;
-			state.now = (PIND & 1) ? rq : rcv; //start bit
+			state.now = R_BIT ? rq : rcv; //start bit
+			ps2_byte = 0;
 			break;
 		case rcv:
-			if( bit_count < 9 ) { // data bits
-				ps2_byte = (ps2_byte << 1) | (PIND & 1);
+			if( bit_count < 9 ) { // data bits, little-endian
+				ps2_byte = (ps2_byte >> 1) | R_BIT;
 				++state.bit_count;
 
 			} else if(( bit_count == 9 ) //parity bit
-				&& ( (PIND & 1) ==  parity_even_bit(ps2_byte) )){ 
+				&& ( !R_BIT ==  !parity_even_bit(ps2_byte) )){ 
 				++state.bit_count;
 
 			} else if( (bit_count == 10) //stop bit
-				&& ( PIND & 1 )) {
+				&& R_BIT ) {
 				add( &rx, ps2_byte );
 				state.bit_count = 0;
 
 			} else {
 				state.now = rq;
 				/* There was an error.
-				 * The bit_count will tell us what do do about it. */
+				 * The bit_count will tell us what do do about it. 
+				 * (if bit_count is zero, then that means we recieved
+				 * the whole frame successfully, so the request-to-send
+				 * must actually be to send a command to the device, not
+				 * just ask it to repeat the last byte it sent. )
+				 */
 			}
 			break;
 
