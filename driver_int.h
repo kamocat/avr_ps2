@@ -44,8 +44,8 @@ void init_ps2( void ) {
 }
 
 /* Define macros for the send_bit and recieve_bit */
-#define S_BIT (ps2_byte & 0x01)
 #define R_BIT (PIND & 0x80)
+#define BIT_OUT(d) PORTD = (PORTD & 0xFE) | ( d & 0x01)
 
 /* TODO: measure timing of signal.
  * The docs say the data should be changed in the MIDDLE
@@ -68,20 +68,20 @@ void init_ps2( void ) {
 ISR( INT1_vect ) {
 	switch( state.now ) {
 		case idle:
-			bit_count = 1;
-			state.now = R_BIT ? rq : rcv; //start bit
+			state.bit_count = 1;
+			state.now = R_BIT ? rq : rcv; //start bit should be 0
 			ps2_byte = 0;
 			break;
 		case rcv:
-			if( bit_count < 9 ) { // data bits, little-endian
+			if( state.bit_count < 9 ) { // data bits, little-endian
 				ps2_byte = (ps2_byte >> 1) | R_BIT;
 				++state.bit_count;
 
-			} else if(( bit_count == 9 ) //parity bit
-				&& ( !R_BIT ==  !parity_even_bit(ps2_byte) )){ 
+			} else if(( state.bit_count == 9 ) //parity bit
+				&& ( (R_BIT >> 7) ==  parity_even_bit(ps2_byte) )){ 
 				++state.bit_count;
 
-			} else if( (bit_count == 10) //stop bit
+			} else if( (state.bit_count == 10) //stop bit
 				&& R_BIT ) {
 				add( &rx, ps2_byte );
 				state.bit_count = 0;
@@ -99,8 +99,34 @@ ISR( INT1_vect ) {
 			break;
 
 		case send:
-			/* TODO: Fill out this case.
-			 * Don't forget to look for the ACK. */
+			/* Because the output is inverted (due to the level shifting),
+			 * ps2_byte should be inverted before sending. This is a faster
+			 * operation than inverting each individual bit, and can also
+			 * happen outside of interrupt scope.
+			 */
+			if( state.bit_count == 0 ) { // start bit
+				BIT_OUT( 1 );
+				ps2_data = get( &tx );
+			} else if( state.bit_count < 9 ) { // data bits
+				BIT_OUT( ps2_byte >> (state.bit_count - 1));
+			} else if( state.bit_count == 9 ) { //parity bit
+				BIT_OUT( !parity_even_bit( ps2_byte ) );
+			} else if( state.bit_count == 10 ) { //stop bit
+				BIT_OUT( 0 );
+			} else if( state.bit_count == 11 ) { //ACK
+				/* Bit recieved should be low. If it's not,
+				 * then we need to send the byte again. */
+				if( R_BIT ) {
+				 	push( &tx, ps2_data );
+				}
+				/* If there's more data, send it. If not, wait. */
+				state.now = tx.size ? rq : idle;
+			} else {
+				// This state should not happen.
+			}
+
+			++state.bit_count;
+
 			break;
 
 		default:
