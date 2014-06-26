@@ -23,6 +23,12 @@ volatile uint8_t ps2_byte;
 volatile uint8_t default_count; // How many times has the default case occured?
 
 
+/* Define bitmasks for clock and data read/control */
+#define CLOCK_CONTROL 0x40
+#define CLOCK_READ 0x02
+#define DATA_CONTROL 0x80
+#define DATA_READ 0x01
+
 void init_ps2( void ) {
 	default_count = 0;
 	state = idle;
@@ -34,9 +40,12 @@ void init_ps2( void ) {
 	/* We need to use seperate pins because we are translating
 	 * voltage levels. The PS/2 device is 5v, and the AVR uC is
 	 * 3.3v. However, this also makes it easier too troubleshoot,
-	 * since I can now tell who the signal is coming from. */
-	DDRD &= ~0x03;	// pin 1 is clock, pin 7 is data (recieving)
-	DDRD |= 0x80;	// pin 6 is clock, pin 0 is data (sending)
+	 * since I can now tell who the signal is coming from.
+	 * It's important to note here that the control bits are inverted, due
+	 * to how it is wired (The bus is open-collector, meaning it has a pull-up
+	 * resistor to 5v, and so we pull it low using a transistor)
+	 */
+	DDRD = DDRD & ~(CLOCK_READ | DATA_READ) | CLOCK_CONTROL | DATA_CONTROL;
 
 	/* TODO: Set up interrupts. Read/write on low-clock. */
 
@@ -44,8 +53,12 @@ void init_ps2( void ) {
 }
 
 /* Define macros for the send_bit and recieve_bit */
-#define R_BIT (PIND & 0x80)
-#define BIT_OUT(d) PORTD = (PORTD & 0xFE) | ( d & 0x01)
+#define R_BIT (PIND & DATA_READ )
+#define BIT_OUT(d) PORTD = (PORTD & ~DATA_CONTROL) | ( d & DATA_CONTROL)
+
+/* Define macros for controlling the clock */
+#define HOLD_CLOCK() PORTD |= CLOCK_CONTROL
+#define RELEASE_CLOCK() PORTD &= ~CLOCK_CONTROL
 
 /* TODO: measure timing of signal.
  * The docs say the data should be changed in the MIDDLE
@@ -106,7 +119,7 @@ ISR( INT1_vect ) {
 			 */
 			if( state.bit_count == 0 ) { // start bit
 				BIT_OUT( 1 );
-				ps2_data = get( &tx );
+				get( &tx, &ps2_byte );
 			} else if( state.bit_count < 9 ) { // data bits
 				BIT_OUT( ps2_byte >> (state.bit_count - 1));
 			} else if( state.bit_count == 9 ) { //parity bit
