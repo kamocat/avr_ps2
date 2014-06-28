@@ -1,21 +1,32 @@
 #ifndef F_CPU
-#define F_CPU 1000000
+#define F_CPU 8000000
 #endif
 
 #include "driver_int.h"
 #include "tdelta.h"
 #include <util/delay.h>
 
+volatile badisr_count = 0;
+ISR( BADISR_vect ) {
+	++badisr_count;
+}
 
 int main( void ) {
 	uint8_t rq_step = 0;
 
 	/* Do tasks based on how much time has elapsed, so that this
 	 * loop doesn't get hung up and not respond quickly enough. */
+	CLKPR = 0x80;
+	CLKPR = 0x00;	// set the system clock prescaler to 1
 	setup_delta_timer();
 	init_ps2();
 	uint16_t tmain;
 	RESET_TDELTA( tmain );
+
+	state.now = hold;	// This will force the interrupt to run the default case, which counts the number of occurances.
+	DDRD |= CLOCK_READ;
+	DDRB = 0xC0;
+	DDRC = 0xFF;
 
 	for( ; ; ) { //infinite loop
 		if( state.now == rq ) {
@@ -66,7 +77,13 @@ int main( void ) {
 
 
 		/* Now do general data processing */
-		_delay_us(100); //Use this to simulate time taken by other functions.
+		_delay_ms(100); //Use this to simulate time taken by other functions.
+		PIND = CLOCK_READ;	//According to the datasheet, this will toggle the output.
+		PORTB = 0x80;	// enable green
+		PORTC = default_count;	// The running count of how many time the default case has been called in the ISR
+		PORTB = 0x40;
+		PORTC = badisr_count;
+
 
 
 		// TODO: If clock is too slow, force resend.

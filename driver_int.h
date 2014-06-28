@@ -50,7 +50,7 @@ void init_ps2( void ) {
 	DDRD = (DDRD & ~(CLOCK_READ | DATA_READ)) | CLOCK_CONTROL | DATA_CONTROL;
 
 	/* Set up interrupts. Read/write on low-clock. */
-	EICRA = 0x80;	// falling edge for INT1
+	EICRA = 0x08;	// falling edge for INT1
 	EIMSK = 0x02;	// enable INT1
 	sei();	// enable global interrupts
 
