@@ -13,6 +13,7 @@ int main( void ) {
 	/* Do tasks based on how much time has elapsed, so that this
 	 * loop doesn't get hung up and not respond quickly enough. */
 	setup_delta_timer();
+	init_ps2();
 	uint16_t tmain;
 	RESET_TDELTA( tmain );
 
@@ -24,6 +25,11 @@ int main( void ) {
 				case 0:
 				HOLD_CLOCK();
 				rq_step = 1;
+				if( state.bit_count != 0 ) { 
+					/* If there was an error recieving the message,
+					 * ask for the byte to be resent. */
+					push( &tx, ~0xFE );
+				}
 				break;
 
 				case 1:
@@ -60,6 +66,7 @@ int main( void ) {
 
 
 		/* Now do general data processing */
+		_delay_us(100); //Use this to simulate time taken by other functions.
 
 
 		// TODO: If clock is too slow, force resend.

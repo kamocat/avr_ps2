@@ -49,7 +49,10 @@ void init_ps2( void ) {
 	 */
 	DDRD = (DDRD & ~(CLOCK_READ | DATA_READ)) | CLOCK_CONTROL | DATA_CONTROL;
 
-	/* TODO: Set up interrupts. Read/write on low-clock. */
+	/* Set up interrupts. Read/write on low-clock. */
+	EICRA = 0x80;	// falling edge for INT1
+	EIMSK = 0x02;	// enable INT1
+	sei();	// enable global interrupts
 
 	return;
 }
@@ -136,6 +139,7 @@ ISR( INT1_vect ) {
 				}
 				/* If there's more data, send it. If not, wait. */
 				state.now = tx.size ? rq : idle;
+				state.bit_count = -1;	//this will roll over at increment
 			} else {
 				// This state should not happen.
 			}
@@ -146,6 +150,10 @@ ISR( INT1_vect ) {
 
 		default:
 			++default_count;
+			/* This is just a diagnostic tool, to see if the clock is
+			 * going when it's not in send or recieve state (which means
+			 * it should probably be in the send or recieve state) 
+			 */
 			break;
 	}
 }
