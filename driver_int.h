@@ -5,6 +5,7 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <stdint.h>
+#include "tdelta.h"
 
 /* This file contains interrupt routines for the PS/2 driver.
 These are not called in any function, and so they must either
@@ -13,7 +14,7 @@ another c file)
 */
 
 
-volatile enum ps2_state state; // current state of the tranciever
+volatile struct ps2_state state; // current state of the tranciever
 
 struct queue rx; // internally volatile
 struct queue tx; // internally volatile 
@@ -31,7 +32,8 @@ volatile uint8_t default_count; // How many times has the default case occured?
 
 void init_ps2( void ) {
 	default_count = 0;
-	state = idle;
+	state.now = idle;
+	state.bit_count = 0;
 	rx.head = 0;
 	rx.size = 0;
 	tx.head = 0;
@@ -45,7 +47,7 @@ void init_ps2( void ) {
 	 * to how it is wired (The bus is open-collector, meaning it has a pull-up
 	 * resistor to 5v, and so we pull it low using a transistor)
 	 */
-	DDRD = DDRD & ~(CLOCK_READ | DATA_READ) | CLOCK_CONTROL | DATA_CONTROL;
+	DDRD = (DDRD & ~(CLOCK_READ | DATA_READ)) | CLOCK_CONTROL | DATA_CONTROL;
 
 	/* TODO: Set up interrupts. Read/write on low-clock. */
 
@@ -123,14 +125,14 @@ ISR( INT1_vect ) {
 			} else if( state.bit_count < 9 ) { // data bits
 				BIT_OUT( ps2_byte >> (state.bit_count - 1));
 			} else if( state.bit_count == 9 ) { //parity bit
-				BIT_OUT( !parity_even_bit( ps2_byte ) );
+				BIT_OUT( parity_even_bit( ps2_byte ) ? 0x00 : 0xFF );
 			} else if( state.bit_count == 10 ) { //stop bit
 				BIT_OUT( 0 );
 			} else if( state.bit_count == 11 ) { //ACK
 				/* Bit recieved should be low. If it's not,
 				 * then we need to send the byte again. */
 				if( R_BIT ) {
-				 	push( &tx, ps2_data );
+				 	push( &tx, ps2_byte );
 				}
 				/* If there's more data, send it. If not, wait. */
 				state.now = tx.size ? rq : idle;

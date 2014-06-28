@@ -3,6 +3,7 @@
 #endif
 
 #include "driver_int.h"
+#include "tdelta.h"
 #include <util/delay.h>
 
 
@@ -35,7 +36,7 @@ int main( void ) {
 				case 2:
 				// Hold data low
 				BIT_OUT( 0xFF );
-				rq_step = 3
+				rq_step = 3;
 				break;
 
 				case 3:
@@ -52,7 +53,7 @@ int main( void ) {
 				case 5:
 				// Release data and go to tx state
 				BIT_OUT( 0 );
-				state.now = tx;
+				state.now = send;
 				break;
 			}
 		}
