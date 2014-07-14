@@ -13,6 +13,7 @@ be in a header file, or directly in main.c. (They can't be in
 another c file)
 */
 
+volatile uint8_t err = 0;
 
 volatile struct ps2_state state; // current state of the tranciever
 
@@ -24,11 +25,12 @@ volatile uint8_t ps2_byte;
 volatile uint8_t default_count; // How many times has the default case occured?
 
 
-/* Define bitmasks for clock and data read/control */
+/* Define bitmasks for clock and data read/control.
+ * All four pins are on PORTD */
 #define CLOCK_CONTROL 0x40
 #define CLOCK_READ 0x02
-#define DATA_CONTROL 0x80
-#define DATA_READ 0x01
+#define DATA_CONTROL 0x01
+#define DATA_READ 0x80
 
 void init_ps2( void ) {
 	default_count = 0;
@@ -96,16 +98,22 @@ ISR( INT1_vect ) {
 				++state.bit_count;
 
 			} else if(( state.bit_count == 9 ) //parity bit
-				&& ( (R_BIT >> 7) ==  parity_even_bit(ps2_byte) )){ 
+				&& ( (R_BIT >> 7) !=  parity_even_bit(ps2_byte) )){
 				++state.bit_count;
 
 			} else if( (state.bit_count == 10) //stop bit
 				&& R_BIT ) {
 				add( &rx, ps2_byte );
 				state.bit_count = 0;
+				state.now = idle;
 
 			} else {
-				state.now = rq;
+				//state.now = rq;
+				err = state.bit_count;
+				++state.bit_count;
+				if( state.bit_count > 10 ) {
+					state.now = idle;
+				}
 				/* There was an error.
 				 * The bit_count will tell us what do do about it. 
 				 * (if bit_count is zero, then that means we recieved

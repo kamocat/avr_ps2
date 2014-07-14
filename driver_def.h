@@ -45,7 +45,7 @@ uint8_t add( struct queue * q, uint8_t byte) {
 }
 
 
-uint8_t get( struct queue * q, uint8_t * dest) {
+uint8_t get( struct queue * q, volatile uint8_t * dest) {
 
 	uint8_t r_val = 0;
 	if( !dest ) {

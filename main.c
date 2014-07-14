@@ -6,27 +6,32 @@
 #include "tdelta.h"
 #include <util/delay.h>
 
-volatile badisr_count = 0;
+volatile uint8_t badisr_count = 0;
 ISR( BADISR_vect ) {
 	++badisr_count;
 }
 
 int main( void ) {
-	uint8_t rq_step = 0;
+	uint8_t rq_step = 99; // Disable rq for now
+	uint8_t rq_count = 0;
 
 	/* Do tasks based on how much time has elapsed, so that this
 	 * loop doesn't get hung up and not respond quickly enough. */
 	CLKPR = 0x80;
 	CLKPR = 0x00;	// set the system clock prescaler to 1
+	/*
 	setup_delta_timer();
-	init_ps2();
-	uint16_t tmain;
+	uint16_t tmain; // keeps track of timestamp for time delta measurements
 	RESET_TDELTA( tmain );
+	*/
+	init_ps2();
 
-	state.now = hold;	// This will force the interrupt to run the default case, which counts the number of occurances.
-	DDRD |= CLOCK_READ;
+	state.now = idle;
 	DDRB = 0xC0;
 	DDRC = 0xFF;
+
+
+	uint8_t data_recieved = 0;
 
 	for( ; ; ) { //infinite loop
 		if( state.now == rq ) {
@@ -39,7 +44,7 @@ int main( void ) {
 				if( state.bit_count != 0 ) { 
 					/* If there was an error recieving the message,
 					 * ask for the byte to be resent. */
-					push( &tx, ~0xFE );
+					push( &tx, 0x01); //0x01 is ~0xFE
 				}
 				break;
 
@@ -71,18 +76,30 @@ int main( void ) {
 				// Release data and go to tx state
 				BIT_OUT( 0 );
 				state.now = send;
+				rq_step = 0;
+				break;
+				
+				default:
+				/* This case isn't meant to happen during normal execution, but is just for debugging. 
+				 * It serves as a way to put the device in recieve-only mode, without changing harder-
+				 * to-find pieces of code. */
+				state.now = idle;
+				++rq_count;
 				break;
 			}
 		}
 
 
 		/* Now do general data processing */
-		_delay_ms(100); //Use this to simulate time taken by other functions.
-		PIND = CLOCK_READ;	//According to the datasheet, this will toggle the output.
-		PORTB = 0x80;	// enable green
-		PORTC = default_count;	// The running count of how many time the default case has been called in the ISR
-		PORTB = 0x40;
-		PORTC = badisr_count;
+//		_delay_us(100); //Use this to simulate time taken by other functions.
+
+		if( rx.size ) {
+			get( &rx, &data_recieved );
+		}
+		PORTB = 0x80;	// enable green buffer
+		PORTC = data_recieved;
+		PORTB = 0x40;	// disable green, enable red
+		PORTC = err;	//basically a recieve error count
 
 
 
